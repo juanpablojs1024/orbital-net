@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Orbital Visualization</title>
+  <style>
+    body {
+      margin: 0;
+      background-color: black;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+    }
+    #message-box {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 8px;
+      color: white;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+    }
+    #message-box input, #message-box textarea, #message-box button {
+      width: 100%;
+      margin-top: 5px;
+      padding: 5px;
+      border-radius: 4px;
+      border: none;
+      font-size: 14px;
+    }
+    #message-box button {
+      background: #28a745;
+      color: white;
+      cursor: pointer;
+    }
+    #message-box button:hover {
+      background: #218838;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="space"></canvas>
+
+  <div id="message-box">
+    <label>Origin</label>
+    <input type="text" id="origin" placeholder="e.g. sat_123" />
+    
+    <label>Destination</label>
+    <input type="text" id="destination" placeholder="e.g. srv_456" />
+    
+    <label>Message</label>
+    <textarea id="message" rows="3" placeholder="Type message..."></textarea>
+    
+    <button onclick="sendMessage()">Send</button>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('space');
+    const ctx = canvas.getContext('2d');
+
+    const CENTER_X = window.innerWidth / 2;
+    const CENTER_Y = window.innerHeight / 2;
+    const SCALE = 100;
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let nodes = [];
+    let visibility = [];
+
+    async function getSimulatorBaseURL() {
+      const res = await fetch("/simulator-url");
+      const data = await res.json();
+      return data.url;
+    }
+
+    async function fetchData() {
+      const baseURL = await getSimulatorBaseURL();
+      const [posRes, visRes] = await Promise.all([
+        fetch(baseURL + '/positions'),
+        fetch(baseURL + '/visibility')
+      ]);
+
+      nodes = await posRes.json();
+      visibility = await visRes.json();
+    }
+
+    let selectedNodes = [];
+
+    canvas.addEventListener("click", (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+
+      // Find clicked node (hit detection radius ~8px)
+      for (const node of nodes) {
+        const x = CENTER_X + node.x * SCALE;
+        const y = CENTER_Y + node.y * SCALE;
+        const dx = mouseX - x;
+        const dy = mouseY - y;
+        if (dx * dx + dy * dy <= 15 * 15) {
+          handleNodeClick(node, event.ctrlKey);
+          break;
+        }
+      }
+    });
+
+    function handleNodeClick(node, ctrlHeld) {
+      if (!ctrlHeld) {
+        // Reset selection if ctrl not held
+        selectedNodes = [node];
+      } else {
+        // If ctrl is held and node not already selected
+        if (!selectedNodes.find(n => n.id === node.id)) {
+          if (selectedNodes.length < 2) {
+            selectedNodes.push(node);
+          } else {
+            // Replace second if already 2 selected
+            selectedNodes[1] = node;
+          }
+        }
+      }
+
+      updateMessageBox();
+    }
+
+    function updateMessageBox() {
+      const originInput = document.getElementById("origin");
+      const destInput = document.getElementById("destination");
+
+      if (selectedNodes.length === 1) {
+        originInput.value = selectedNodes[0].id;
+        destInput.value = "";
+      } else if (selectedNodes.length === 2) {
+        originInput.value = selectedNodes[0].id;
+        destInput.value = selectedNodes[1].id;
+      }
+    }
+
+
+    function drawPlanet() {
+      ctx.beginPath();
+      ctx.arc(CENTER_X, CENTER_Y, SCALE, 0, 2 * Math.PI);
+      ctx.fillStyle = '#5555ff';
+      ctx.fill();
+    }
+
+    function drawOrbits() {
+      const radiiDrawn = new Set();
+      nodes.forEach(node => {
+        const radius = Math.round(Math.sqrt(node.x * node.x + node.y * node.y) * SCALE);
+        if (!radiiDrawn.has(radius)) {
+          ctx.beginPath();
+          ctx.arc(CENTER_X, CENTER_Y, radius, 0, 2 * Math.PI);
+          ctx.strokeStyle = '#444';
+          ctx.stroke();
+          radiiDrawn.add(radius);
+        }
+      });
+    }
+
+    function drawNodes() {
+      nodes.forEach(node => {
+        const x = CENTER_X + node.x * SCALE;
+        const y = CENTER_Y + node.y * SCALE;
+
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, 2 * Math.PI);
+
+        if (selectedNodes.find(n => n.id === node.id)) {
+          ctx.fillStyle = "cyan"; // highlight selected
+        } else {
+          ctx.fillStyle = node.id.startsWith('sat_') ? 'orange' : 'lime';
+        }
+        ctx.fill();
+
+        // Write name + id
+        ctx.fillStyle = 'white';
+        ctx.font = '12px Arial';
+        ctx.fillText(`${node.name} (${node.id})`, x + 10, y);
+      });
+    }
+
+
+    function drawVisibility() {
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = 0; j < nodes.length; j++) {
+          if (i !== j && visibility[i][j]) {
+            const xi = CENTER_X + nodes[i].x * SCALE;
+            const yi = CENTER_Y + nodes[i].y * SCALE;
+            const xj = CENTER_X + nodes[j].x * SCALE;
+            const yj = CENTER_Y + nodes[j].y * SCALE;
+
+            ctx.beginPath();
+            ctx.moveTo(xi, yi);
+            ctx.lineTo(xj, yj);
+            ctx.strokeStyle = 'rgba(75,255,0,0.3)';
+            ctx.stroke();
+          }
+        }
+      }
+    }
+
+    async function animate() {
+      await fetchData(); // just fetch current state
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      drawPlanet();
+      drawOrbits();
+      drawVisibility();
+      drawNodes();
+
+      requestAnimationFrame(animate);
+    }
+
+    async function sendMessage() {
+      const origin = document.getElementById("origin").value.trim();
+      const destination = document.getElementById("destination").value.trim();
+      const message = document.getElementById("message").value.trim();
+      const status = document.getElementById("status");
+
+      if (!origin || !destination || !message) {
+        status.textContent = "⚠️ Please fill all fields.";
+        status.style.color = "yellow";
+        return;
+      }
+
+      try {
+        const res = await fetch("/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ origin, destination, message })
+        });
+
+        if (res.ok) {
+          status.textContent = "✅ Message sent!";
+          status.style.color = "lightgreen";
+        } else {
+          status.textContent = "❌ Failed to send.";
+          status.style.color = "red";
+        }
+      } catch (err) {
+        console.error(err);
+        status.textContent = "❌ Error sending message.";
+        status.style.color = "red";
+      }
+    }
+
+    animate();
+  </script>
+</body>
+</html>
