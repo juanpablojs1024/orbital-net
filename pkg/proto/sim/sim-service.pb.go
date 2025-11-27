@@ -68,7 +68,6 @@ func (NodeType) EnumDescriptor() ([]byte, []int) {
 	return file_pkg_proto_sim_sim_service_proto_rawDescGZIP(), []int{0}
 }
 
-// --- ESTOS MENSAJES FALTABAN ---
 type Empty struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields

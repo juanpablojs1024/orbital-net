@@ -26,7 +26,6 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CommunicationsServiceClient interface {
-	// Permite a un usuario o cliente externo inyectar un mensaje en la red
 	SendMessage(ctx context.Context, in *MessageRequest, opts ...grpc.CallOption) (*MessageResponse, error)
 }
 
@@ -52,7 +51,6 @@ func (c *communicationsServiceClient) SendMessage(ctx context.Context, in *Messa
 // All implementations must embed UnimplementedCommunicationsServiceServer
 // for forward compatibility.
 type CommunicationsServiceServer interface {
-	// Permite a un usuario o cliente externo inyectar un mensaje en la red
 	SendMessage(context.Context, *MessageRequest) (*MessageResponse, error)
 	mustEmbedUnimplementedCommunicationsServiceServer()
 }

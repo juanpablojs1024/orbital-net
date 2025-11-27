@@ -2,9 +2,7 @@ GOPATH := $(shell go env GOPATH)
 PROTOC_GEN_GO := $(GOPATH)/bin/protoc-gen-go
 PROTOC_GEN_GO_GRPC := $(GOPATH)/bin/protoc-gen-go-grpc
 
-count ?= 1
 parallel ?= false
-msg ?= "Hello"
 
 setup-cluster:
 	minikube addons enable metrics-server
@@ -87,26 +85,11 @@ build-control-center-service:
 
 build-all: build-sim-service build-storage-service build-pathfinder-service build-communications-service build-control-center-service
 
-port-forward-sim:
-	kubectl port-forward svc/sim-server 50051:50051
-
-port-forward-pathfinder:
-	kubectl port-forward svc/pathfinder-server 50052:50052
-
 port-forward-communications:
 	kubectl port-forward svc/communications-server 50053:50053
 
 port-forward-control:
 	kubectl port-forward svc/control-center-server 8080:8080
-
-run-sim-client:
-	go run test/sim-client/main.go
-
-run-pathfinder-client:
-	go run services/path-client/main.go -start=$(start) -end=$(end)
-
-run-communications-client:
-	go run services/coms-client/main.go -origin=$(origin) -dest=$(dest) -msg=$(msg) -count=$(count) -parallel=$(parallel)
 
 run-test:
 	@echo "🔧 Ensuring Environment is ready..."
@@ -141,8 +124,10 @@ run-test:
 	-kill $$(cat .pf_pid) 2>/dev/null || true
 	-rm .pf_pid 2>/dev/null || true
 	@echo "✅ Test sequence complete."
+
 monitor:
 	kubectl get hpa -w
+
 clean:
 	@echo "🧹 Cleaning K8s resources..."
 	# Deployments & Services
@@ -166,10 +151,10 @@ reset: clean build-all
 
 tunnel:
 	minikube tunnel
-stop-tunnel:
-	@echo "🛑 Deteniendo túneles previos..."
-	-sudo pkill -f "minikube tunnel" || true
-	
+
+get-external-ip:
+	kubectl get svc control-center
+
 deploy-port: clean build-all
 	@echo "🔍 Asegurando que Minikube esté iniciado..."
 	@minikube status >/dev/null 2>&1 || minikube start
@@ -202,41 +187,3 @@ deploy-port: clean build-all
 	)
 
 	@true
-deploy-extern: clean build-all
-	@echo "🔍 Asegurando que Minikube esté iniciado..."
-	@minikube status >/dev/null 2>&1 || minikube start
-
-	@echo "🚀 Desplegando Orbital Net..."
-
-	@echo "⏳ Esperando a que el Control Center arranque completamente..."
-	@kubectl wait --for=condition=available deployment/control-center-deployment --timeout=120s > /dev/null
-
-	@echo "🔌 Iniciando minikube tunnel (requiere sudo)..."
-	@( \
-		trap "" INT; \
-		sudo minikube tunnel > /dev/null 2>&1 & \
-		TUN_PID=$$!; \
-		echo "⏳ Esperando a que el túnel establezca rutas..."; \
-		sleep 5; \
-		\
-		SVC_URL=$$(minikube service control-center --url 2>/dev/null); \
-		if [ -z "$$SVC_URL" ]; then \
-			echo ""; \
-			echo "❌ Error: No se pudo obtener la URL del servicio."; \
-			echo "🔍 Tip: Asegúrate de que el servicio tenga type=LoadBalancer."; \
-			kill $$TUN_PID >/dev/null 2>&1; \
-			exit 1; \
-		fi; \
-		\
-		echo "✅ ¡Sistema listo!"; \
-		echo "🌍 URL: $$SVC_URL"; \
-		xdg-open "$$SVC_URL" 2>/dev/null || \
-		open "$$SVC_URL" 2>/dev/null || \
-		echo "⚠️ Abre la URL manualmente."; \
-		echo ""; \
-		echo "🔴 El túnel está activo. MANTÉN ESTA TERMINAL ABIERTA."; \
-		echo "🔴 Presiona Ctrl+C para detener."; \
-		\
-		trap "echo '\n🛑 Cerrando túnel...'; kill $$TUN_PID 2>/dev/null; exit 0" INT; \
-		wait $$TUN_PID; \
-	) || true

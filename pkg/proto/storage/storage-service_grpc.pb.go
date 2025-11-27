@@ -28,7 +28,6 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type StorageServiceClient interface {
 	SaveMessage(ctx context.Context, in *SaveRequest, opts ...grpc.CallOption) (*SaveResponse, error)
-	// NUEVO: Obtener logs
 	GetLogs(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*LogList, error)
 }
 
@@ -65,7 +64,6 @@ func (c *storageServiceClient) GetLogs(ctx context.Context, in *Empty, opts ...g
 // for forward compatibility.
 type StorageServiceServer interface {
 	SaveMessage(context.Context, *SaveRequest) (*SaveResponse, error)
-	// NUEVO: Obtener logs
 	GetLogs(context.Context, *Empty) (*LogList, error)
 	mustEmbedUnimplementedStorageServiceServer()
 }
