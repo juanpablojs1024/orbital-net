@@ -2,9 +2,21 @@
 
 ### **Distributed Satellite Communication Simulator**
 
-**Orbital Net** is a Kubernetes-native distributed system designed to simulate, visualize, and test communication protocols in a Low-Earth-Orbit (LEO) satellite network.
+**Orbital Net** is a **Kubernetes-native** distributed system designed to simulate, visualize, and test communication protocols in **satellite networks**.
 
-The system is built using a **microservices architecture** with **gRPC-only communication**, implementing dynamic routing, data persistence, automatic horizontal scaling, and real-time orbital physics.
+The current implementation can simulate multiple **circular** orbital regimes, including:
+
+* **LEO (Low-Earth Orbit)** – 160–2,000 km altitude
+
+* **MEO (Medium-Earth Orbit)** – 2,000–35,786 km, including GNSS orbits (e.g., GPS, Galileo)
+
+* **GEO (Geostationary-Earth Orbit)** – 35,786 km, fixed over the equator
+
+* **HEO (High-Earth Orbit)** – 35,786+ km orbits
+
+The simulator used in this version is **2D**, modeling satellite motion and line-of-sight communication on a planar orbital approximation using **simplified Keplerian motion**. Despite being **2D**, the system maintains realistic **orbital dynamics**, real-time **physics** updates, and **dynamic network topology** across a microservices architecture.
+
+Orbital-Net is built entirely with **gRPC-based** microservices, supporting dynamic routing, data persistence, automatic horizontal scaling via **Kubernetes HPA**, and continuous real-time simulation of orbital motion.
 
 ---
 
