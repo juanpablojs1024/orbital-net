@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package sim;
+option go_package = "orbital-net/pkg/proto/sim";
+
+import "pkg/proto/common/model.proto";
+
+service SimulationService {
+  rpc StreamSimulation (Empty) returns (stream SimulationState);
+  rpc CreateNode (CreateNodeRequest) returns (CreateNodeResponse);
+  rpc DeleteNode (DeleteNodeRequest) returns (DeleteNodeResponse);
+  rpc ClearSimulation (Empty) returns (Empty);
+}
+
+message Empty {}
+
+message SimulationState {
+  int64 timestamp = 1;
+  repeated common.Node nodes = 2;
+}
+
+enum NodeType {
+  SATELLITE = 0;
+  STATION = 1;
+}
+
+message CreateNodeRequest {
+  string name = 1;
+  double altitude = 2; 
+  double angle = 3;
+  NodeType type = 4;
+  int32 port_quantity = 5; 
+  int32 port_generation = 6;
+}
+
+message CreateNodeResponse {
+  string node_id = 1;
+  bool success = 2;
+}
+
+message DeleteNodeRequest {
+  string node_id = 1;
+}
+
+message DeleteNodeResponse {
+  bool success = 1;
+}

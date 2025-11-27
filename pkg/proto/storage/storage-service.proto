@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package storage;
+option go_package = "orbital-net/pkg/proto/storage";
+
+service StorageService {
+  rpc SaveMessage (SaveRequest) returns (SaveResponse);
+  rpc GetLogs (Empty) returns (LogList);
+}
+
+message Empty {}
+
+message SaveRequest {
+  string sender_id = 1;
+  string receiver_id = 2;
+  string payload = 3;
+  int64 timestamp = 4;
+}
+
+message SaveResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message LogEntry {
+  string sender_id = 1;
+  string receiver_id = 2;
+  string payload = 3;
+  int64 timestamp = 4;
+}
+
+message LogList {
+  repeated LogEntry entries = 1;
+}

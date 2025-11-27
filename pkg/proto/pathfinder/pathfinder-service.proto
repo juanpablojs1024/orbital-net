@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package pathfinder;
+option go_package = "orbital-net/pkg/proto/pathfinder";
+
+service PathfinderService {
+  rpc FindPath (PathRequest) returns (PathResponse);
+}
+
+message PathRequest {
+  string start_node_id = 1;
+  string end_node_id = 2;
+}
+
+message PathResponse {
+  bool found = 1;
+  repeated string path_node_ids = 2;
+  string error_message = 3;
+}

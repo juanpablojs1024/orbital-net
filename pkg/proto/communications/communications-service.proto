@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package communications;
+option go_package = "orbital-net/pkg/proto/communications";
+
+service CommunicationsService {
+  rpc SendMessage (MessageRequest) returns (MessageResponse);
+}
+
+message MessageRequest {
+  string origin_id = 1;
+  string destination_id = 2;
+  string payload = 3;
+}
+
+message MessageResponse {
+  bool success = 1;
+  string message = 2;
+}

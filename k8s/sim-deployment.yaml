@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sim-server
+spec:
+  selector:
+    app: orbital-sim
+  ports:
+    - protocol: TCP
+      port: 50051
+      targetPort: 50051
+  type: ClusterIP
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sim-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orbital-sim
+  template:
+    metadata:
+      labels:
+        app: orbital-sim
+    spec:
+      containers:
+        - name: sim
+          image: sim-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 50051
+          command: ["./sim-bin"]

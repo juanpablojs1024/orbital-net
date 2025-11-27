@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Orbital Control Center</title>
+  <style>
+    body { margin: 0; background-color: #0b0c10; color: #66fcf1; font-family: monospace; overflow: hidden; }
+    #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    .panel { 
+      background: rgba(11, 12, 16, 0.9); 
+      border: 1px solid #45a29e; 
+      padding: 15px; 
+      pointer-events: auto; 
+      border-radius: 5px;
+      box-shadow: 0 0 10px rgba(69, 162, 158, 0.2);
+    }
+    #controls { position: absolute; top: 20px; left: 20px; width: 300px; }
+    #logs { position: absolute; bottom: 20px; right: 20px; width: 400px; height: 200px; overflow-y: auto; font-size: 12px; }
+    
+    h3 { margin-top: 0; color: #c5c6c7; border-bottom: 1px solid #45a29e; padding-bottom: 5px; font-size: 14px; }
+    label { font-size: 10px; color: #888; display: block; margin-bottom: 2px; }
+
+    input, textarea, button { 
+      width: 100%; margin-bottom: 10px; background: #1f2833; border: 1px solid #45a29e; color: white; padding: 8px; box-sizing: border-box;
+    }
+    button { background: #45a29e; color: black; font-weight: bold; cursor: pointer; border: none; }
+    button:hover { background: #66fcf1; }
+    
+    .btn-launch { background: #f0a500; color: black; }
+    .btn-launch:hover { background: #ffc13b; }
+    
+    .btn-danger { background: #8b0000; color: white; margin-top: 5px; }
+    .btn-danger:hover { background: #ff0000; }
+
+    .row { display: flex; gap: 10px; }
+    .col { flex: 1; }
+
+    .log-entry { border-bottom: 1px solid #333; padding: 4px 0; }
+    .log-time { color: #888; margin-right: 5px; }
+
+    .toggle-container {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 10px;
+      background: #1f2833;
+      border-radius: 20px;
+      padding: 3px;
+      border: 1px solid #45a29e;
+    }
+    .toggle-opt {
+      flex: 1;
+      text-align: center;
+      padding: 5px;
+      cursor: pointer;
+      border-radius: 15px;
+      font-size: 11px;
+      transition: all 0.3s;
+      color: #888;
+    }
+    .toggle-opt.active { background: #45a29e; color: black; font-weight: bold; }
+    .input-disabled { opacity: 0.5; pointer-events: none; background: #111; }
+    
+    #node-mgmt { display: none; border-top: 1px solid #45a29e; padding-top: 10px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <canvas id="space"></canvas>
+
+  <div id="ui-layer">
+    <div id="controls" class="panel">
+      
+      <h3>🚀 Launchpad</h3>
+      <div class="toggle-container">
+        <div id="opt-sat" class="toggle-opt active" onclick="setType('sat')">🛰️ Satellite</div>
+        <div id="opt-station" class="toggle-opt" onclick="setType('station')">📡 Station</div>
+      </div>
+      <div>
+        <label>Node Name</label>
+        <input type="text" id="node-name" placeholder="e.g. Sputnik-1" />
+        
+        <!-- FILA 1: Altura y Angulo -->
+        <div class="row">
+          <div class="col"><label>Altitude (km)</label><input type="number" id="node-alt" value="2000" /></div>
+          <div class="col"><label>Angle (Deg)</label><input type="number" id="node-angle" value="45" /></div>
+        </div>
+
+        <!-- FILA 2 (NUEVA): Puertos y Generación -->
+        <div class="row">
+          <div class="col"><label>Ports</label><input type="number" id="node-ports" value="4" min="1" /></div>
+          <div class="col"><label>Gen</label><input type="number" id="node-gen" value="4" min="1" /></div>
+        </div>
+
+        <button class="btn-launch" onclick="launchNode()">LAUNCH</button>
+      </div>
+
+      <!-- Gestión de Nodos (Solo visible si 1 nodo seleccionado) -->
+      <div id="node-mgmt">
+        <h3>⚙️ Node Management</h3>
+        <label>Selected Node:</label>
+        <input type="text" id="selected-id" disabled style="opacity: 0.7; color: cyan;" />
+        <button class="btn-danger" onclick="deleteSelectedNode()">DELETE NODE</button>
+      </div>
+
+      <h3 style="margin-top: 20px;">📡 Comms Uplink</h3>
+      <p style="font-size: 10px; color: #666; margin-top: -5px;">Click to set Origin / Ctrl+Click for Dest.</p>
+      <label>Origin ID</label>
+      <input type="text" id="origin" placeholder="Select node..." />
+      <label>Destination ID</label>
+      <input type="text" id="destination" placeholder="Ctrl+Select node..." />
+      <label>Payload</label>
+      <textarea id="message" rows="2" placeholder="Message content...">Ping</textarea>
+      <button onclick="sendMsg()">TRANSMIT DATA</button>
+      
+      <hr style="border-color: #333; margin: 15px 0;">
+      <button class="btn-danger" onclick="clearAll()">🔥 CLEAR ALL NODES</button>
+      <div id="status" style="margin-top: 10px;">System Ready.</div>
+    </div>
+
+    <div id="logs" class="panel">
+      <h3>💾 Live Logs</h3>
+      <div id="log-content">Connecting...</div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('space');
+    const ctx = canvas.getContext('2d');
+    const SCALE_FACTOR = 50000; 
+    const EARTH_RADIUS_METERS = 6371000;
+    const LERP_FACTOR = 0.1; 
+    let nodesMap = new Map(); 
+    let selectedNodes = []; 
+    let width, height, cx, cy;
+
+    function resize() {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+      cx = width / 2; cy = height / 2;
+    }
+    window.onresize = resize; resize();
+    function lerp(start, end, factor) { return start + (end - start) * factor; }
+
+    // --- INTERACCIÓN MOUSE ---
+    canvas.addEventListener("mousedown", (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+
+      let clickedNode = null;
+      for (const node of nodesMap.values()) {
+        const x = cx + (node.currentX / SCALE_FACTOR);
+        const y = cy + (node.currentY / SCALE_FACTOR);
+        const dx = mouseX - x;
+        const dy = mouseY - y;
+        if (dx * dx + dy * dy <= 15 * 15) {
+          clickedNode = node;
+          break; 
+        }
+      }
+
+      if (clickedNode) {
+        handleNodeClick(clickedNode, event.ctrlKey || event.metaKey);
+      } else {
+        if (!(event.ctrlKey || event.metaKey)) {
+            selectedNodes = [];
+            updateUI();
+        }
+      }
+    });
+
+    function handleNodeClick(node, ctrlHeld) {
+      if (!ctrlHeld) {
+        selectedNodes = [node];
+      } else {
+        if (selectedNodes.length > 0 && selectedNodes[0].id === node.id) {
+        } else if (selectedNodes.length < 2) {
+            selectedNodes.push(node);
+        } else {
+            selectedNodes[1] = node;
+        }
+      }
+      updateUI();
+    }
+
+    function updateUI() {
+      const originInput = document.getElementById("origin");
+      const destInput = document.getElementById("destination");
+      originInput.value = selectedNodes.length >= 1 ? selectedNodes[0].id : "";
+      destInput.value = selectedNodes.length >= 2 ? selectedNodes[1].id : "";
+
+      const mgmtPanel = document.getElementById("node-mgmt");
+      const selectedIdInput = document.getElementById("selected-id");
+      
+      if (selectedNodes.length === 1) {
+          mgmtPanel.style.display = "block";
+          const targetNode = selectedNodes[0];
+          selectedIdInput.value = targetNode.name + " (" + targetNode.id + ")";
+          mgmtPanel.dataset.targetId = targetNode.id;
+      } else {
+          mgmtPanel.style.display = "none";
+      }
+    }
+
+    // --- ACCIONES DE GESTIÓN ---
+
+    async function deleteSelectedNode() {
+        const mgmtPanel = document.getElementById("node-mgmt");
+        const idToDelete = mgmtPanel.dataset.targetId;
+        if (!idToDelete) return;
+
+        if(!confirm("Delete node " + idToDelete + "?")) return;
+
+        try {
+            await fetch('/api/delete-node', {
+                method: 'POST',
+                body: JSON.stringify({ id: idToDelete })
+            });
+            selectedNodes = selectedNodes.filter(n => n.id !== idToDelete);
+            updateUI();
+        } catch(e) { console.error(e); }
+    }
+
+    async function clearAll() {
+        if(!confirm("🔥 Are you sure you want to DESTROY ALL NODES?")) return;
+        try {
+            await fetch('/api/clear-all', { method: 'POST' });
+            selectedNodes = [];
+            updateUI();
+        } catch(e) { console.error(e); }
+    }
+
+    // --- LANZAMIENTO & COMMS ---
+    
+    let currentType = 'sat';
+    function setType(type) {
+        currentType = type;
+        document.getElementById('opt-sat').className = type === 'sat' ? 'toggle-opt active' : 'toggle-opt';
+        document.getElementById('opt-station').className = type === 'station' ? 'toggle-opt active' : 'toggle-opt';
+        const altInput = document.getElementById('node-alt');
+        if (type === 'station') {
+            altInput.value = 0; altInput.classList.add('input-disabled');
+            document.getElementById('node-name').placeholder = "e.g. Station-Alpha";
+        } else {
+            altInput.value = 2000; altInput.classList.remove('input-disabled');
+            document.getElementById('node-name').placeholder = "e.g. Sputnik-1";
+        }
+    }
+
+    async function launchNode() {
+        const name = document.getElementById('node-name').value || (currentType==='sat'?"Sat-":"Stn-") + Math.floor(Math.random()*1000);
+        const altKm = parseFloat(document.getElementById('node-alt').value)||0;
+        const angle = parseFloat(document.getElementById('node-angle').value)||0;
+        
+        const ports = parseInt(document.getElementById('node-ports').value)||4;
+        const gen = parseInt(document.getElementById('node-gen').value)||4;
+
+        await fetch('/api/create-node', { method: 'POST', body: JSON.stringify({
+            name: name, altitude: altKm*1000, angle: angle*(Math.PI/180), type: currentType,
+            ports: ports, gen: gen
+        })});
+    }
+
+    async function sendMsg() {
+        const org = document.getElementById('origin').value;
+        const dst = document.getElementById('destination').value;
+        const msg = document.getElementById('message').value;
+        const status = document.getElementById('status');
+        try {
+            const r = await fetch('/api/send', { method:'POST', body: JSON.stringify({origin:org, destination:dst, message:msg})});
+            const d = await r.json();
+            status.innerText = d.success ? "✅ Sent" : "❌ " + d.message;
+        } catch(e) { status.innerText = "❌ Error"; }
+    }
+
+    async function fetchLoop() {
+      try {
+        const res = await fetch('/api/state');
+        const data = await res.json();
+        const serverIds = new Set(data ? data.map(n => n.id) : []);
+        nodesMap.forEach((val, key) => {
+            if (!serverIds.has(key)) nodesMap.delete(key);
+        });
+
+        if (data) {
+          data.forEach(serverNode => {
+            if (!nodesMap.has(serverNode.id)) {
+              nodesMap.set(serverNode.id, { ...serverNode, currentX: serverNode.x, currentY: serverNode.y, targetX: serverNode.x, targetY: serverNode.y });
+            } else {
+              const localNode = nodesMap.get(serverNode.id);
+              localNode.targetX = serverNode.x; localNode.targetY = serverNode.y; localNode.peers = serverNode.peers;
+            }
+          });
+        }
+      } catch(e) {}
+      setTimeout(fetchLoop, 50); 
+    }
+
+    async function fetchLogs() {
+        try {
+            const res = await fetch('/api/logs');
+            const logs = await res.json();
+            const container = document.getElementById('log-content');
+            
+            if (!logs || logs.length === 0) {
+                container.innerHTML = '<div style="padding:10px; color:#666; font-style:italic;">(Database is empty)</div>';
+            } else {
+                container.innerHTML = logs.reverse().map(l => `
+                <div class="log-entry">
+                    <span class="log-time">LOG</span>
+                    <span style="color: #f0a500">${l.sender_id}</span> ➔ 
+                    <span style="color: #f0a500">${l.receiver_id}</span>: 
+                    <span style="color: #fff">${l.payload}</span>
+                </div>
+                `).join('');
+            }
+        } catch(e){
+             if (document.getElementById('log-content').innerHTML.includes("Connecting")) {
+                 document.getElementById('log-content').innerHTML = '<div style="padding:10px; color:red;">Connection failed. Retrying...</div>';
+             }
+        }
+        setTimeout(fetchLogs, 2000);
+    }
+
+    function draw() {
+      ctx.fillStyle = 'black'; ctx.fillRect(0, 0, width, height);
+      const rEarth = EARTH_RADIUS_METERS / SCALE_FACTOR;
+      ctx.beginPath(); ctx.arc(cx, cy, rEarth, 0, Math.PI * 2); ctx.fillStyle = '#1f4068'; ctx.fill(); ctx.strokeStyle = '#45a29e'; ctx.stroke();
+
+      nodesMap.forEach(n => {
+        n.currentX = lerp(n.currentX, n.targetX, LERP_FACTOR);
+        n.currentY = lerp(n.currentY, n.targetY, LERP_FACTOR);
+        const x = cx + (n.currentX / SCALE_FACTOR);
+        const y = cy + (n.currentY / SCALE_FACTOR);
+
+        if(n.peers) {
+          ctx.strokeStyle = 'rgba(102, 252, 241, 0.15)';
+          n.peers.forEach(peerId => {
+            const peer = nodesMap.get(peerId);
+            if(peer) {
+              const px = cx + (peer.currentX / SCALE_FACTOR);
+              const py = cy + (peer.currentY / SCALE_FACTOR);
+              ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(px, py); ctx.stroke();
+            }
+          });
+        }
+
+        ctx.beginPath();
+        const isSelected = selectedNodes.some(sel => sel.id === n.id);
+        const radius = isSelected ? 8 : 5;
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        if (isSelected) { ctx.fillStyle = "cyan"; ctx.shadowBlur = 10; ctx.shadowColor = "cyan"; } 
+        else { ctx.fillStyle = n.id.startsWith('gn_') ? '#f0a500' : '#fff'; ctx.shadowBlur = 0; }
+        ctx.fill(); ctx.shadowBlur = 0;
+
+        ctx.fillStyle = isSelected ? 'cyan' : '#888'; 
+        ctx.font = '11px monospace'; ctx.fillText(n.name, x + 10, y + 3);
+      });
+      requestAnimationFrame(draw);
+    }
+    fetchLoop(); fetchLogs(); draw();
+  </script>
+</body>
+</html>

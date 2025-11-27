@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pathfinder-server
+spec:
+  selector:
+    app: orbital-pathfinder
+  ports:
+    - protocol: TCP
+      port: 50052
+      targetPort: 50052
+  type: ClusterIP
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pathfinder-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orbital-pathfinder
+  template:
+    metadata:
+      labels:
+        app: orbital-pathfinder
+    spec:
+      containers:
+        - name: pathfinder
+          image: pathfinder-service:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 50052
+          env:
+            - name: SERVER_HOST
+              value: "sim-server"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          command: ["./pathfinder-bin"]
