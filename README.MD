@@ -1,89 +1,170 @@
-# Orbital Net — Satellite Communications Simulator
+# 🛰️ Orbital Net
 
-**Orbital Net** is a simulation project for satellite-based communication networks. Its goal is to emulate how ground nodes communicate through orbital nodes, replicating the behavior of a dynamic satellite network.
+### **Distributed Satellite Communication Simulator**
 
-## Main features
-- **Dynamic topology**: simulates satellite orbits and planetary rotation.
-- **Network protocols**: models node communication and basic protocol behavior.
-- **Pathfinding**: routing algorithms that adapt to changing topology.
-- **Port speed & bandwidth**: simulate bandwidth constraints and link capacity.
-- **Hybrid nodes**: supports ground nodes and orbital relays.
+**Orbital Net** is a Kubernetes-native distributed system designed to simulate, visualize, and test communication protocols in a Low-Earth-Orbit (LEO) satellite network.
 
-## Project structure
+The system is built using a **microservices architecture** with **gRPC-only communication**, implementing dynamic routing, data persistence, automatic horizontal scaling, and real-time orbital physics.
+
+---
+
+## 🚀 System Architecture
+
+Orbital Net is composed of **5 microservices**, deployed as independent Kubernetes workloads:
+
+### **Microservices Overview**
+
+| Service                    | K8s Type     | Description                                                                                                                                     |
+| -------------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **sim-service**            | ClusterIP    | Physics Engine. Computes Keplerian orbits and visibility matrices in real time (20 Hz). Emits a continuous gRPC stream.                         |
+| **pathfinder-service**     | ClusterIP    | Routing Brain. Builds a dynamic graph and computes optimal routes using a **Widest Path algorithm**, prioritizing higher-generation satellites. |
+| **communications-service** | ClusterIP    | Message Orchestrator. Implements Store-and-Forward, manages queues, handles overload, and retries delivery. Includes HorizontalPodAutoscaler.   |
+| **storage-service**        | ClusterIP    | Persistence Layer. Stores message logs using an append-only on-disk structure.                                                                  |
+| **control-center**         | LoadBalancer | API Gateway & Web UI. Visualizes the network, allows spawning satellites, and sending commands.                                                 |
+
+---
+
+## 📋 Prerequisites
+
+Required tools:
+
+* **Go 1.24+**
+* **Docker**
+* **Minikube**
+* **Kubectl**
+* **K6** (for load testing)
+* **Make**
+
+---
+
+# ⚡ Quick Start Deployment
+
+You can deploy the entire system with just a few commands.
+
+---
+### **1. Clean Previous Deployments**
+
+```bash
+make clean
 ```
-satellite-coms/orbital-net/
-├── simulator/        # orbit, position and motion simulation
-├── communications/   # node communication, link models, protocols
-├── pathfinder/       # routing and search algorithms
-├── controlcenter/    # monitoring, metrics and visualization hooks
-├── database/         # persistence and test datasets
-├── examples/         # sample scenarios and configs
-└── README.md
+
+---
+
+### **2. Generate gRPC Code (Protobuf)**
+
+Runs `protoc` for all proto files in:
+
+* `pkg/proto/common`
+* `pkg/proto/sim`
+* `pkg/proto/pathfinder`
+* `pkg/proto/communications`
+* `pkg/proto/storage`
+
+```bash
+make proto
 ```
 
-## Quick start
-1. Clone the repository:
+---
+## **3. Prepare the Kubernetes Cluster**
+
+Enable the Kubernetes metrics server (required for HPA):
+
+```bash
+make setup-cluster
 ```
-git clone https://github.com/<user>/satellite-coms.git
-cd satellite-coms/orbital-net
+
+---
+
+## **4. Deploy Everything 🪄**
+
+This builds Docker images and applies all Kubernetes manifests:
+
+```bash
+make build-all
 ```
-2. Create a virtual environment (optional) and install dependencies:
+
+---
+
+### **5. Expose the UI (Minikube Tunnel)**
+
+Run in a separate terminal:
+
+```bash
+make tunnel
 ```
-# for Python components
-python -m venv venv
-source venv/bin/activate    # macOS / Linux
-venv\Scripts\activate     # Windows PowerShell
 
-pip install -r requirements.txt
+Retrieve the external IP:
+
+```bash
+make get-ip
 ```
-3. Run services or scripts independently:
+
+Open in the browser:
+
 ```
-# example, if modules are Python-based
-python simulator/main.py
-python communications/main.py
-python pathfinder/main.py
-python controlcenter/main.py
+http://<EXTERNAL-IP>:8080
 ```
-Alternatively use `Makefile` / `docker-compose` if available.
 
-## Simulation flow (high level)
-1. Simulator generates orbital node positions and visibility windows between ground and orbital nodes.
-2. Ground nodes request connections; pathfinder computes candidate routes across satellites.
-3. Communications module enforces latency, bandwidth and link constraints.
-4. Controlcenter collects metrics, logs and optionally visualizes the network.
+---
 
-## Configuration & inputs
-- Satellite orbit parameters (altitude, inclination, period).
-- Ground node coordinates and traffic demand.
-- Link bandwidth / latency models and port speeds.
-- Pathfinding strategy and protocol timeouts.
 
-## Recommended technologies
-- **Python / Go** for simulation and services.
-- **Redis** for ephemeral state and fast caching.
-- **PostgreSQL** for persistent results and scenarios.
-- **Docker / Kubernetes** for containerized deployment.
-- **Prometheus / Grafana** for monitoring.
+# 🧪 Load Testing & Auto-Scaling
 
-## Performance & scaling notes
-- Simulating many satellites and long time horizons can be CPU and memory intensive.
-- Consider running heavy simulations in batches or with distributed workers.
-- Use approximate/heuristic pathfinding (A*, greedy) for larger topologies.
+Orbital Net includes a full K6 load-testing setup to stress the communication network and trigger autoscaling.
 
-## Tests & examples
-Include small reproducible scenarios in `examples/`:
-- Single-satellite relay test.
-- Low-earth constellation with 4 satellites.
-- Failure and recovery scenarios.
+---
 
-## Roadmap / future work
-- Real-time visualization dashboard.
-- More realistic RF link models (SNR, fading).
-- Integrated packet-level simulation for throughput studies.
-- Fault injection and resiliency experiments.
+## **Run a Load Test**
 
-## Contributing
-Please open issues, fork the repo and submit pull requests. Provide test cases for new features and keep changes modular.
+Specify **origin** and **destination** node IDs:
 
-## License
-This project is available under the MIT license. See `LICENSE` for details.
+```bash
+make test origin=<origin_id> dest=<dest_id>
+```
+
+Example:
+
+```bash
+make test origin=gn_4c3e3 dest=on_8bbd4
+```
+
+This automatically:
+
+* Kills old port-forward sessions
+* Opens a new tunnel to `communications-service`
+* Runs K6 inside Docker
+* Closes the port-forward when done
+
+---
+
+## **Monitor Auto-Scaling**
+
+In another terminal:
+
+```bash
+make monitor-scaling
+```
+
+You’ll see pods scaling dynamically (e.g., 1 → 10 replicas).
+
+---
+
+# 🛑 Stopping the System
+
+Stop the Minikube tunnel:
+
+```
+Ctrl + C
+```
+
+Clean all deployments:
+
+```bash
+make clean
+```
+
+Or reset (clean + deploy everything):
+
+```bash
+make reset
+```
